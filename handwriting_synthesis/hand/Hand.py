@@ -132,7 +132,7 @@ class Hand(object):
 
         dwg = svgwrite.Drawing(filename=filename)
         dwg.viewbox(width=view_width, height=view_height)
-        dwg.add(dwg.rect(insert=(0, 0), size=(view_width, view_height), fill='white'))
+        # dwg.add(dwg.rect(insert=(0, 0), size=(view_width, view_height), fill='white'))
 
         initial_coord = np.array([0, 0])
 
@@ -167,7 +167,7 @@ class Hand(object):
 
 
         # scalex = abs(char_width / np.median(char_widths))
-        max_num_chars = int(round(width / char_width))
+        # max_num_chars = int(round(width / char_width))
 
         scalex = 0.7 * abs(char_width / np.max(char_widths)) + 0.3 * abs(char_width / np.median(char_widths))
 
