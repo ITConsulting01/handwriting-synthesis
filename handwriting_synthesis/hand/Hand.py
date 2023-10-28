@@ -132,7 +132,7 @@ class Hand(object):
 
         dwg = svgwrite.Drawing(filename=filename)
         dwg.viewbox(width=view_width, height=view_height)
-        # dwg.add(dwg.rect(insert=(0, 0), size=(view_width, view_height), fill='white'))
+        dwg.add(dwg.rect(insert=(0, 0), size=(view_width, view_height), fill='white'))
 
         initial_coord = np.array([0, 0])
 
@@ -152,7 +152,7 @@ class Hand(object):
         char_widths = []
 
         stroke_start = 0
-        stroke_end = 0
+
         eos = 1
         for p in strokes:
 
@@ -187,11 +187,14 @@ class Hand(object):
 
 
             strokes[:, 1] *= -1
+            strokes[:, 1] += + np.random.rand() * line_height * 0.05 # randomness factor to lineheight
             strokes[:, :2] -= strokes[:, :2].min() + initial_coord
+            strokes[:, :2] -= np.random.rand() * char_width  # randomness factor to line start
             # strokes[:, 0] += (view_width - strokes[:, 0].max()) / 2
 
             prev_eos = 1.0
-            p = "M{},{} ".format(0, 0)
+            # p = "M{},{} ".format(0, 0)
+            p = ""
             for x, y, eos in zip(*strokes.T):
                 p += '{}{},{} '.format('M' if prev_eos == 1.0 else 'L', x, y)
                 prev_eos = eos
