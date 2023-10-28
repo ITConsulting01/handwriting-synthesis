@@ -4,7 +4,7 @@ import svgwrite
 from handwriting_synthesis import drawing
 
 
-def _draw(strokes, lines, filename, stroke_colors=None, stroke_widths=None):
+def _draw(strokes, lines, filename, stroke_colors=None, stroke_widths=None, media_height=None, media_width=None):
     stroke_colors = stroke_colors or ['black'] * len(lines)
     stroke_widths = stroke_widths or [2] * len(lines)
 

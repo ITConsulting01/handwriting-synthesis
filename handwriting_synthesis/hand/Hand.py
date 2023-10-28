@@ -2,10 +2,11 @@ import logging
 import os
 
 import numpy as np
+import svgwrite
 
 from handwriting_synthesis import drawing
 from handwriting_synthesis.config import prediction_path, checkpoint_path, style_path
-from handwriting_synthesis.hand._draw import _draw
+# from handwriting_synthesis.hand._draw import _draw
 from handwriting_synthesis.rnn import RNN
 
 
@@ -37,16 +38,17 @@ class Hand(object):
         )
         self.nn.restore()
 
-    def write(self, filename, lines, biases=None, styles=None, stroke_colors=None, stroke_widths=None):
+    def write(self, filename, lines, biases=None, styles=None, stroke_colors=None, stroke_widths=None,
+              media_height=None, media_width=None, text_height=None, char_width=None):
         valid_char_set = set(drawing.alphabet)
         for line_num, line in enumerate(lines):
-            if len(line) > 75:
-                raise ValueError(
-                    (
-                        "Each line must be at most 75 characters. "
-                        "Line {} contains {}"
-                    ).format(line_num, len(line))
-                )
+            # if len(line.strip(" ")) > round(media_width / char_width):
+            #     raise ValueError(
+            #         (
+            #             "Line too long for character width requested. max num char per line is {}"
+            #             "Line {} contains {}"
+            #         ).format(round(media_width / char_width), line_num, len(line))
+            #     )
 
             for char in line:
                 if char not in valid_char_set:
@@ -58,7 +60,14 @@ class Hand(object):
                     )
 
         strokes = self._sample(lines, biases=biases, styles=styles)
-        _draw(strokes, lines, filename, stroke_colors=stroke_colors, stroke_widths=stroke_widths)
+
+        if media_height is None:
+            media_height = 1000
+        if media_width is None:
+            media_width = 1000
+
+        self._draw(strokes, lines, filename, stroke_colors=stroke_colors, stroke_widths=stroke_widths,
+                   width=media_width, height=media_height, text_height=text_height, char_width=char_width)
 
     def _sample(self, lines, biases=None, styles=None):
         num_samples = len(lines)
@@ -105,3 +114,93 @@ class Hand(object):
         )
         samples = [sample[~np.all(sample == 0.0, axis=1)] for sample in samples]
         return samples
+
+    def _draw(self, strokes, lines, filename, stroke_colors=None, stroke_widths=None, width=1000, height=1000,
+              text_height=10, char_width=10):
+        stroke_colors = stroke_colors or ['black'] * len(lines)
+        stroke_widths = stroke_widths or [0.1] * len(lines) # lineweight
+
+        line_height = text_height  # height in mm
+        view_width = width
+        view_height = line_height * (len(strokes) + 1)
+
+        if view_height > height:
+
+            line_height = height / (len(strokes) + 1)
+
+        view_height = height
+
+        dwg = svgwrite.Drawing(filename=filename)
+        dwg.viewbox(width=view_width, height=view_height)
+        dwg.add(dwg.rect(insert=(0, 0), size=(view_width, view_height), fill='white'))
+
+        initial_coord = np.array([0, 0])
+
+        min_y = 100
+        max_y = -100
+
+        for l in strokes:
+
+            if l[:, 1].min() < min_y:
+                min_y = l[:, 1].min()
+
+            if l[:, 1].max() > max_y:
+                max_y = l[:, 1].max()
+
+        scaley = abs(line_height / (max_y - min_y))
+
+        char_widths = []
+
+        stroke_start = 0
+        stroke_end = 0
+        eos = 1
+        for p in strokes:
+
+            for s in p:
+                if eos == 1:
+                    stroke_start = s[0]
+                    eos = 0
+                if s[2] == 1:
+                    stroke_end = s[0]
+                    char_widths.append(abs(stroke_end - stroke_start))
+                    eos = 1
+
+
+        # scalex = abs(char_width / np.median(char_widths))
+        max_num_chars = int(round(width / char_width))
+
+        scalex = 0.7 * abs(char_width / np.max(char_widths)) + 0.3 * abs(char_width / np.median(char_widths))
+
+        for offsets, line, color, width in zip(strokes, lines, stroke_colors, stroke_widths):
+
+            if not line:
+                initial_coord[1] -= line_height
+                continue
+
+            # offsets[:, :2] *= 1.5
+            strokes = drawing.offsets_to_coords(offsets)
+            strokes = drawing.denoise(strokes)
+
+            strokes = drawing.stretch(strokes, scalex, scaley)
+
+            strokes[:, :2] = drawing.align(strokes[:, :2])
+
+
+            strokes[:, 1] *= -1
+            strokes[:, :2] -= strokes[:, :2].min() + initial_coord
+            # strokes[:, 0] += (view_width - strokes[:, 0].max()) / 2
+
+            prev_eos = 1.0
+            p = "M{},{} ".format(0, 0)
+            for x, y, eos in zip(*strokes.T):
+                p += '{}{},{} '.format('M' if prev_eos == 1.0 else 'L', x, y)
+                prev_eos = eos
+            path = svgwrite.path.Path(p)
+            path = path.stroke(color=color, width=width, linecap='round').fill("none")
+            dwg.add(path)
+
+            initial_coord[1] -= line_height
+
+        dwg.save()
+
+
